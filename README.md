@@ -1,4 +1,7 @@
 # ⚡ **NetPulse: Intelligent Edge AI for Real-Time Network Diagnostics**
+By: Ayush, Joe, Max, Sophia
+
+Submission Link: https://devpost.com/software/the-most-optimal-network
 
 ## 💡 **Inspiration**  
 Every minute of network downtime costs enterprises **thousands of dollars** — yet most monitoring systems are *reactive*, not *preventive.*  
