@@ -1,0 +1,191 @@
+📊 FIRESTORE DATABASE STRUCTURE
+================================
+
+Your Firestore Database
+│
+├── 📁 network_metrics (collection)          ← Change in FirestoreService.swift line 18, 28
+│   └── 📄 {auto-generated-id}
+│       ├── timestamp: Timestamp
+│       ├── latency: Number
+│       ├── throughput_down: Number         ← Field name in NetworkMetrics.swift CodingKeys
+│       ├── throughput_up: Number
+│       ├── packet_loss: Number
+│       ├── signal_strength: Number
+│       ├── jitter: Number
+│       └── device_id: String               ← Used in query .whereField("device_id", ...)
+│
+├── 📁 sensor_data (collection)              ← Change in FirestoreService.swift line 43, 60
+│   └── 📄 {auto-generated-id}
+│       ├── timestamp: Timestamp
+│       ├── sensor_type: String             ← "temperature", "humidity", "motion", etc.
+│       ├── value: Number
+│       ├── unit: String
+│       ├── device_id: String
+│       └── arduino_id: String
+│
+├── 📁 anomalies (collection)                ← Change in FirestoreService.swift line 76, 91, 104
+│   └── 📄 {auto-generated-id}
+│       ├── timestamp: Timestamp
+│       ├── type: String                    ← "latency_spike", "packet_loss", etc.
+│       ├── severity: String                ← "critical", "warning", "info"
+│       ├── description: String
+│       ├── root_cause: String
+│       ├── recommended_action: String
+│       ├── is_resolved: Boolean
+│       ├── resolved_at: Timestamp
+│       ├── affected_metrics: Array<String>
+│       └── device_id: String
+│
+├── 📁 agent_actions (collection)            ← Change in FirestoreService.swift line 110, 118
+│   └── 📄 {auto-generated-id}
+│       ├── timestamp: Timestamp
+│       ├── action_type: String
+│       ├── description: String
+│       ├── success: Boolean
+│       ├── anomaly_id: String
+│       ├── before_metrics: Map
+│       ├── after_metrics: Map
+│       └── ai_response: String
+│
+└── 📁 agent_state (collection)              ← Change in FirestoreService.swift line 123
+    └── 📄 current (document)                ← Change document name here too
+        ├── status: String                   ← "idle", "analyzing", "acting", "waiting"
+        ├── current_task: String
+        ├── last_action_timestamp: Timestamp
+        ├── model_version: String
+        └── accuracy_score: Number
+
+
+🔄 DATA FLOW DIAGRAM
+====================
+
+Raspberry Pi                 Firestore Cloud              iOS App
+    │                             │                         │
+    ├─ Network Tools              │                         │
+    │  (ping, speedtest)          │                         │
+    │        │                    │                         │
+    │        ├─────────────────>  │  network_metrics        │
+    │                              │         │               │
+    │                              │         └──────────────>│ DashboardView
+    │                              │                         │ NetworkMonitorView
+    ├─ Arduino Sensors             │                         │
+    │  (DHT11, MPU6050)            │                         │
+    │        │                     │                         │
+    │        ├─────────────────>   │  sensor_data            │
+    │                              │         │               │
+    │                              │         └──────────────>│ SensorsDashboardView
+    │                              │                         │
+    ├─ ML Models                   │                         │
+    │  (Isolation Forest)          │                         │
+    │        │                     │                         │
+    │        ├─────────────────>   │  anomalies              │
+    │                              │         │               │
+    │                              │         └──────────────>│ AnomaliesView
+    │                              │                         │ DashboardView (alerts)
+    │                              │                         │
+    │                              │                         │
+    │                              │  <───────────────────── │ User requests AI analysis
+    │                              │                         │
+    │                              │                         ├─> Gemini API
+    │                              │                         │       │
+    │                              │  agent_actions <───────────────┘
+    │                              │         │
+    │                              │         └──────────────>│ AIAgentView
+    │                              │                         │
+
+
+📝 QUERY PATTERNS USED
+======================
+
+1. Fetch with filtering:
+   db.collection("network_metrics")
+     .whereField("device_id", isEqualTo: "raspberry_pi_001")
+     .order(by: "timestamp", descending: true)
+     .limit(to: 100)
+
+2. Real-time listener:
+   db.collection("sensor_data")
+     .whereField("device_id", isEqualTo: deviceId)
+     .addSnapshotListener { ... }
+
+3. Compound query:
+   db.collection("sensor_data")
+     .whereField("device_id", isEqualTo: deviceId)
+     .whereField("sensor_type", isEqualTo: "temperature")
+
+4. Document update:
+   db.collection("anomalies")
+     .document(anomalyId)
+     .updateData([...])
+
+5. Add new document:
+   db.collection("agent_actions")
+     .addDocument(from: action)
+
+
+🎯 WHERE TO CHANGE WHAT
+=======================
+
+To change collection "network_metrics" to "metrics":
+├─ FirestoreService.swift:18  → db.collection("metrics")
+└─ FirestoreService.swift:28  → db.collection("metrics")
+
+To change field "device_id" to "raspberry_pi_id":
+├─ NetworkMetrics.swift       → case deviceId = "raspberry_pi_id"
+├─ SensorData.swift           → case deviceId = "raspberry_pi_id"
+├─ Anomaly.swift              → case deviceId = "raspberry_pi_id"
+└─ FirestoreService.swift     → .whereField("raspberry_pi_id", ...)
+   (All .whereField references to device_id)
+
+To change default device ID from "raspberry_pi_001":
+├─ DashboardViewModel.swift:18     → private let deviceId = "your_id"
+├─ NetworkMonitorViewModel.swift:11 → private let deviceId = "your_id"
+└─ SettingsView.swift:11           → @AppStorage("deviceId") = "your_id"
+
+
+📚 EXAMPLE FIRESTORE DOCUMENTS
+===============================
+
+network_metrics/abc123:
+{
+  "timestamp": Timestamp(2025, 10, 18, 10, 30, 0),
+  "latency": 45.2,
+  "throughput_down": 120.5,
+  "throughput_up": 25.3,
+  "packet_loss": 0.5,
+  "signal_strength": -65,
+  "jitter": 8.2,
+  "device_id": "raspberry_pi_001"
+}
+
+sensor_data/xyz789:
+{
+  "timestamp": Timestamp(2025, 10, 18, 10, 30, 0),
+  "sensor_type": "temperature",
+  "value": 25.5,
+  "unit": "°C",
+  "device_id": "raspberry_pi_001",
+  "arduino_id": "arduino_001"
+}
+
+anomalies/def456:
+{
+  "timestamp": Timestamp(2025, 10, 18, 10, 30, 0),
+  "type": "latency_spike",
+  "severity": "warning",
+  "description": "Latency increased to 150ms",
+  "root_cause": "Network congestion detected",
+  "recommended_action": "Consider restarting router",
+  "is_resolved": false,
+  "affected_metrics": ["latency", "jitter"],
+  "device_id": "raspberry_pi_001"
+}
+
+agent_state/current:
+{
+  "status": "idle",
+  "current_task": null,
+  "last_action_timestamp": Timestamp(2025, 10, 18, 10, 0, 0),
+  "model_version": "1.0.0",
+  "accuracy_score": 92.5
+}
